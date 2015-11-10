@@ -1,0 +1,117 @@
+#include "Timer.h";
+#include <Wire.h>
+#include "rgb_lcd.h"
+
+rgb_lcd lcd;
+boolean pulso;
+boolean controle = LOW;
+boolean staCalibracao = LOW;
+const int analogInPin = A0;  
+int count_batimento = 0;
+int sensorValue = 0;        
+int refCalibracao = 0;
+int lim_inf = 10000;
+float lim_sup = 0;
+int button  = 3;
+float BPM = 0;
+int sta_start = 0;
+int tickEvent;
+int mostrou = 0;
+Timer t;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(button, INPUT);
+  pinMode(2, OUTPUT);
+  lcd.begin(16, 2);
+  lcd.clear();
+  lcd.display();
+  lcd.setRGB(0,250,0);
+  lcd.print("Press button.");
+}
+
+void loop() {
+  if (digitalRead(button) == 1 && sta_start == 0) {
+    sta_start = 1;
+    lcd.clear();
+    lcd.display();
+    lcd.setRGB(0,250,0);
+    lcd.print("Calibrando...");
+    tickEvent = t.every(3000, fim_calib, 1);
+  }
+  else {
+    if (staCalibracao) {
+      if (digitalRead(button) == 1 && sta_start == 1) {
+        sta_start = 0;
+        staCalibracao = LOW;
+        lcd.begin(16, 2);
+        lcd.clear();
+        lcd.display();
+        lcd.print("Press button.");
+        delay(250);
+      }
+  
+      if(staBatimento() == HIGH && controle == HIGH) {
+        count_batimento++;
+        controle = LOW;
+        if (BPM > 39)
+          digitalWrite(2, 1);
+      }
+      
+      if(staBatimento() == LOW && controle == LOW) {
+        controle = HIGH;
+        if (BPM > 39)
+          digitalWrite(2, 0);
+      } 
+    }
+    else {
+      calibra_batimento();
+    }
+  }
+  //
+  t.update();
+}
+
+boolean staBatimento() {
+  // read the analog in value:
+  sensorValue = analogRead(analogInPin);
+  if(sensorValue > refCalibracao){
+    pulso = HIGH;
+  }
+  else{
+    pulso =  LOW;
+  }
+  return pulso;
+}
+
+void calibra_batimento () {
+  sensorValue = analogRead(analogInPin);
+  if (sensorValue > lim_sup) lim_sup = sensorValue;
+}
+
+void fim_calib() {
+  refCalibracao = lim_sup * 0.8;
+  staCalibracao = HIGH;
+  tickEvent = t.every(10000, calculaBPM);  
+  Serial.println("Fazendo...");
+}
+
+void calculaBPM() {
+  BPM = count_batimento * 6;
+  lcd.clear();
+  lcd.display();
+  if (BPM < 40 || BPM > 130) {
+    lcd.setRGB(250,0,0);
+    if (BPM < 40)
+      digitalWrite(2, 1);
+  }
+  else {
+    lcd.setRGB(0,250,0);
+    digitalWrite(2, 0);
+  }
+  lcd.print("BPM: ");
+  lcd.print(BPM);
+  Serial.println(count_batimento);
+  mostrou = 1;
+  count_batimento = 0;
+}
